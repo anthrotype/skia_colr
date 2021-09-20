@@ -31,6 +31,7 @@ GrVkPipelineState::GrVkPipelineState(
         GrVkGpu* gpu,
         sk_sp<const GrVkPipeline> pipeline,
         const GrVkDescriptorSetManager::Handle& samplerDSHandle,
+        GrUniformDataManager::ProgramUniforms programUniforms,
         const GrGLSLBuiltinUniformHandles& builtinUniformHandles,
         const UniformInfoArray& uniforms,
         uint32_t uniformSize,
@@ -45,7 +46,7 @@ GrVkPipelineState::GrVkPipelineState(
         , fGPImpl(std::move(gpImpl))
         , fXPImpl(std::move(xpImpl))
         , fFPImpls(std::move(fpImpls))
-        , fDataManager(uniforms, uniformSize, usePushConstants) {
+        , fDataManager(std::move(programUniforms), uniforms, uniformSize, usePushConstants) {
     fNumSamplers = samplers.count();
     for (const auto& sampler : samplers.items()) {
         // We store the immutable samplers here and take a ref on the sampler. Once we switch to
@@ -77,6 +78,8 @@ bool GrVkPipelineState::setAndBindUniforms(GrVkGpu* gpu,
                                            SkISize colorAttachmentDimensions,
                                            const GrProgramInfo& programInfo,
                                            GrVkCommandBuffer* commandBuffer) {
+    fDataManager.setUniforms(programInfo);
+
     this->setRenderTargetState(colorAttachmentDimensions, programInfo.origin());
 
     fGPImpl->setData(fDataManager, *gpu->caps()->shaderCaps(), programInfo.geomProc());
@@ -150,7 +153,7 @@ bool GrVkPipelineState::setAndBindTextures(GrVkGpu* gpu,
 
     if (fNumSamplers == 1) {
         auto texture = samplerBindings[0].fTexture;
-        auto texAttachment = texture->textureAttachment();
+        auto texAttachment = texture->textureImage();
         const auto& samplerState = samplerBindings[0].fState;
         const GrVkDescriptorSet* descriptorSet = texture->cachedSingleDescSet(samplerState);
         if (descriptorSet) {
@@ -175,7 +178,7 @@ bool GrVkPipelineState::setAndBindTextures(GrVkGpu* gpu,
     for (int i = 0; i < fNumSamplers; ++i) {
         GrSamplerState state = samplerBindings[i].fState;
         GrVkTexture* texture = samplerBindings[i].fTexture;
-        auto texAttachment = texture->textureAttachment();
+        auto texAttachment = texture->textureImage();
 
         const GrVkImageView* textureView = texAttachment->textureView();
         const GrVkSampler* sampler = nullptr;
